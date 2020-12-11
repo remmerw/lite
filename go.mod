@@ -1,4 +1,4 @@
-module gitlab.com/remmer.wilts/lite
+module github.com/remmerw/lite
 
 go 1.13
 
