@@ -8,7 +8,7 @@
   <packaging>aar</packaging>
   <name>IPFS Light</name>
   <description>IPFS Library</description>
-  <url>https://gitlab.com/remmer.wilts/lite</url>
+  <url>https://github.com/remmerw/lite</url>
   <licenses>
     <license>
       <name>The Apache Software License, Version 2.0</name>
@@ -23,8 +23,8 @@
     </developer>
   </developers>
   <scm>
-    <connection>https://gitlab.com/remmer.wilts/lite</connection>
-    <developerConnection>https://gitlab.com/remmer.wilts/lite</developerConnection>
-    <url>https://gitlab.com/remmer.wilts/lite</url>
+    <connection>https://github.com/remmerw/lite</connection>
+    <developerConnection>https://github.com/remmerw/lite</developerConnection>
+    <url>https://github.com/remmerw/lite</url>
   </scm>
 </project>
