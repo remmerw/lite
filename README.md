@@ -13,4 +13,4 @@ cd $HOME
 
 set GO111MODULE=off
 
-gomobile bind -o lite-1.0.0.aar -v -androidapi=24 -target=android github.com/remmerw/lite
+gomobile bind -o lite-1.0.1.aar -v -androidapi=24 -target=android github.com/remmerw/lite
