@@ -141,7 +141,7 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 		n.Routing, err = dht.New(
 			ctx, host,
 			dht.Concurrency(10),
-			dht.Mode(dht.ModeAuto),
+			dht.Mode(dht.ModeClient),
 			dht.Datastore(n.DataStore),
 			dht.Validator(n.RecordValidator))
 
@@ -208,7 +208,7 @@ func (n *Node) Push(pid string, msg []byte) (int, error) {
 		return 0, err
 	}
 
-	defer clientConn.Close();
+	defer clientConn.Close()
 
 	err = clientConn.SetDeadline(time.Now().Add(Timeout))
 	if err != nil {
@@ -235,7 +235,6 @@ func (n *Node) Push(pid string, msg []byte) (int, error) {
 	return num, nil
 }
 
-
 func receiver(n *Node) {
 
 	listener, _ := gostream.Listen(n.Host, ProtocolPush)
@@ -250,7 +249,6 @@ func receiver(n *Node) {
 			return
 		}
 
-
 		if !n.Shutdown {
 
 			buf := make([]byte, MaxSize)
@@ -263,7 +261,7 @@ func receiver(n *Node) {
 				n.Listener.Error(err.Error())
 			} else {
 				if n.Pushing {
-					n.Listener.Push(buf[:num], conn.RemoteAddr().String() )
+					n.Listener.Push(buf[:num], conn.RemoteAddr().String())
 					_, err = conn.Write([]byte("ok"))
 				} else {
 					_, err = conn.Write([]byte("ko"))
@@ -274,7 +272,7 @@ func receiver(n *Node) {
 				n.Listener.Error(err.Error())
 			}
 		} else {
-			return;
+			return
 		}
 	}
 }
