@@ -18,20 +18,21 @@ func Create(path string) (*Datastore, error) {
 		return nil, err
 	}
 
-	defopts := badger.LSMOnlyOptions("")
+	defaultOptions := badger.DefaultOptions("")
 
 	// This is to optimize the database on close so it can be opened
 	// read-only and efficiently queried. We don't do that and hanging on
 	// stop isn't nice.
-	defopts.CompactL0OnClose = false
+	defaultOptions.CompactL0OnClose = false
 
-	defopts.SyncWrites = true
+	defaultOptions.SyncWrites = true
+	defaultOptions.ValueThreshold = 1024
 
 	// Uses less memory, is no slower when writing, and is faster when
 	// reading (in some tests).
-	defopts.ValueLogLoadingMode = options.FileIO
+	defaultOptions.ValueLogLoadingMode = options.FileIO
 
-	defopts.TableLoadingMode = options.FileIO
+	defaultOptions.TableLoadingMode = options.FileIO
 
-	return NewDatastore(p, defopts)
+	return NewDatastore(p, defaultOptions)
 }

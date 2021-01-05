@@ -20,23 +20,19 @@ type Datastore struct {
 	closing   chan struct{}
 }
 
-func (d *Datastore) Sync(prefix ds.Key) error {
+func (d *Datastore) Sync(ds.Key) error {
 
 	return d.DB.Sync()
 }
 
 // Implements the datastore.Txn interface, enabling transaction support for
 // the badger DataStore.
-type txn struct {
-	ds  *Datastore
-	txn *badger.Txn
 
-	// Whether this transaction has been implicitly created as a result of a direct DataStore
-	// method invocation.
-	implicit bool
+type txn struct {
+	ds *Datastore
 }
 
-func (t *txn) Sync(prefix ds.Key) error {
+func (t *txn) Sync(ds.Key) error {
 	return nil
 }
 
@@ -70,108 +66,103 @@ func NewDatastore(path string, opt badger.Options) (*Datastore, error) {
 // NewTransaction starts a new transaction. The resulting transaction object
 // can be mutated without incurring changes to the underlying DataStore until
 // the transaction is Committed.
-func (d *Datastore) NewTransaction(readOnly bool) (ds.Txn, error) {
-	return &txn{d, d.DB.NewTransaction(!readOnly), false}, nil
-}
-
-// newImplicitTransaction creates a transaction marked as 'implicit'.
-// Implicit transactions are created by DataStore methods performing single operations.
-func (d *Datastore) newImplicitTransaction(readOnly bool) *txn {
-	return &txn{d, d.DB.NewTransaction(!readOnly), true}
+func (d *Datastore) NewTransaction(bool) (ds.Txn, error) {
+	return &txn{d}, nil
 }
 
 func (d *Datastore) Put(key ds.Key, value []byte) error {
 
-	txn := d.newImplicitTransaction(false)
-	defer txn.discard()
+	txn := d.DB.NewTransaction(true)
+	defer txn.Discard()
 
-	if err := txn.put(key, value); err != nil {
+	if err := txn.Set(key.Bytes(), value); err != nil {
 		return err
 	}
 
-	return txn.commit()
+	return txn.Commit()
 }
 
 func (d *Datastore) PutWithTTL(key ds.Key, value []byte, ttl time.Duration) error {
 
-	txn := d.newImplicitTransaction(false)
-	defer txn.discard()
+	txn := d.DB.NewTransaction(true)
+	defer txn.Discard()
 
-	if err := txn.putWithTTL(key, value, ttl); err != nil {
+	if err := putWithTTL(txn, key, value, ttl); err != nil {
 		return err
 	}
 
-	return txn.commit()
+	return txn.Commit()
 }
 
 func (d *Datastore) SetTTL(key ds.Key, ttl time.Duration) error {
 
-	txn := d.newImplicitTransaction(false)
-	defer txn.discard()
+	txn := d.DB.NewTransaction(true)
+	defer txn.Discard()
 
-	if err := txn.setTTL(key, ttl); err != nil {
+	if err := setTTL(txn, key, ttl); err != nil {
 		return err
 	}
 
-	return txn.commit()
+	return txn.Commit()
 }
 
 func (d *Datastore) GetExpiration(key ds.Key) (time.Time, error) {
 
-	txn := d.newImplicitTransaction(false)
-	defer txn.discard()
+	txn := d.DB.NewTransaction(true)
+	defer txn.Discard()
 
-	return txn.getExpiration(key)
+	return getExpiration(txn, key)
 }
 
 func (d *Datastore) Get(key ds.Key) (value []byte, err error) {
 
-	txn := d.newImplicitTransaction(true)
-	defer txn.discard()
+	txn := d.DB.NewTransaction(false)
+	defer txn.Discard()
 
-	return txn.get(key)
+	return get(txn, key)
 }
 
 func (d *Datastore) Has(key ds.Key) (bool, error) {
 
-	txn := d.newImplicitTransaction(true)
-	defer txn.discard()
+	txn := d.DB.NewTransaction(false)
+	defer txn.Discard()
 
-	return txn.has(key)
+	return has(txn, key)
 }
 
 func (d *Datastore) GetSize(key ds.Key) (size int, err error) {
 
-	txn := d.newImplicitTransaction(true)
-	defer txn.discard()
+	txn := d.DB.NewTransaction(false)
+	defer txn.Discard()
 
-	return txn.getSize(key)
+	return getSize(txn, key)
 }
 
 func (d *Datastore) Delete(key ds.Key) error {
 	//d.closeLk.RLock()
 	//defer d.closeLk.RUnlock()
 
-	txn := d.newImplicitTransaction(false)
-	defer txn.discard()
+	txn := d.DB.NewTransaction(true)
+	defer txn.Discard()
 
-	err := txn.delete(key)
+	err := txn.Delete(key.Bytes())
+
 	if err != nil {
 		return err
 	}
 
-	return txn.commit()
+	return txn.Commit()
 }
 
 func (d *Datastore) Query(q dsq.Query) (dsq.Results, error) {
 	//d.closeLk.RLock()
 	//defer d.closeLk.RUnlock()
 
-	txn := d.newImplicitTransaction(true)
+	txn := d.DB.NewTransaction(true)
 	// We cannot defer txn.Discard() here, as the txn must remain active while the iterator is open.
 	// https://github.com/dgraph-io/badger/commit/b1ad1e93e483bbfef123793ceedc9a7e34b09f79
 	// The closing logic in the query goprocess takes care of discarding the implicit transaction.
-	return txn.query(q)
+	return query(txn, q)
 }
 
 // DiskUsage implements the PersistentDatastore interface.
@@ -199,32 +190,25 @@ var _ ds.Datastore = (*txn)(nil)
 var _ ds.TTLDatastore = (*txn)(nil)
 
 func (t *txn) Put(key ds.Key, value []byte) error {
-
-	return t.put(key, value)
-}
-
-func (t *txn) put(key ds.Key, value []byte) error {
-
-	return t.txn.Set(key.Bytes(), value)
+	return t.ds.Put(key, value)
 }
 
 func (t *txn) PutWithTTL(key ds.Key, value []byte, ttl time.Duration) error {
-
-	return t.putWithTTL(key, value, ttl)
+	return t.ds.PutWithTTL(key, value, ttl)
 }
 
-func (t *txn) putWithTTL(key ds.Key, value []byte, ttl time.Duration) error {
+func putWithTTL(txn *badger.Txn, key ds.Key, value []byte, ttl time.Duration) error {
 
-	return t.txn.SetEntry(badger.NewEntry(key.Bytes(), value).WithTTL(ttl))
+	return txn.SetEntry(badger.NewEntry(key.Bytes(), value).WithTTL(ttl))
 }
 
 func (t *txn) GetExpiration(key ds.Key) (time.Time, error) {
 
-	return t.getExpiration(key)
+	return t.ds.GetExpiration(key)
 }
 
-func (t *txn) getExpiration(key ds.Key) (time.Time, error) {
-	item, err := t.txn.Get(key.Bytes())
+func getExpiration(txn *badger.Txn, key ds.Key) (time.Time, error) {
+	item, err := txn.Get(key.Bytes())
 	if err == badger.ErrKeyNotFound {
 		return time.Time{}, ds.ErrNotFound
 	} else if err != nil {
@@ -234,27 +218,27 @@ func (t *txn) getExpiration(key ds.Key) (time.Time, error) {
 }
 
 func (t *txn) SetTTL(key ds.Key, ttl time.Duration) error {
-	return t.setTTL(key, ttl)
+	return t.ds.SetTTL(key, ttl)
 }
 
-func (t *txn) setTTL(key ds.Key, ttl time.Duration) error {
-	item, err := t.txn.Get(key.Bytes())
+func setTTL(txn *badger.Txn, key ds.Key, ttl time.Duration) error {
+	item, err := txn.Get(key.Bytes())
 	if err != nil {
 		return err
 	}
 	return item.Value(func(data []byte) error {
-		return t.putWithTTL(key, data, ttl)
+		return putWithTTL(txn, key, data, ttl)
 	})
 
 }
 
 func (t *txn) Get(key ds.Key) ([]byte, error) {
 
-	return t.get(key)
+	return t.ds.Get(key)
 }
 
-func (t *txn) get(key ds.Key) ([]byte, error) {
-	item, err := t.txn.Get(key.Bytes())
+func get(txn *badger.Txn, key ds.Key) ([]byte, error) {
+	item, err := txn.Get(key.Bytes())
 	if err == badger.ErrKeyNotFound {
 		err = ds.ErrNotFound
 	}
@@ -266,11 +250,11 @@ func (t *txn) get(key ds.Key) ([]byte, error) {
 }
 
 func (t *txn) Has(key ds.Key) (bool, error) {
-	return t.has(key)
+	return t.ds.Has(key)
 }
 
-func (t *txn) has(key ds.Key) (bool, error) {
-	_, err := t.txn.Get(key.Bytes())
+func has(txn *badger.Txn, key ds.Key) (bool, error) {
+	_, err := txn.Get(key.Bytes())
 	switch err {
 	case badger.ErrKeyNotFound:
 		return false, nil
@@ -283,11 +267,11 @@ func (t *txn) has(key ds.Key) (bool, error) {
 
 func (t *txn) GetSize(key ds.Key) (int, error) {
 
-	return t.getSize(key)
+	return t.ds.GetSize(key)
 }
 
-func (t *txn) getSize(key ds.Key) (int, error) {
-	item, err := t.txn.Get(key.Bytes())
+func getSize(txn *badger.Txn, key ds.Key) (int, error) {
+	item, err := txn.Get(key.Bytes())
 	switch err {
 	case nil:
 		return int(item.ValueSize()), nil
@@ -300,20 +284,16 @@ func (t *txn) getSize(key ds.Key) (int, error) {
 
 func (t *txn) Delete(key ds.Key) error {
 
-	return t.delete(key)
-}
-
-func (t *txn) delete(key ds.Key) error {
-	return t.txn.Delete(key.Bytes())
+	return t.ds.Delete(key)
 }
 
 func (t *txn) Query(q dsq.Query) (dsq.Results, error) {
-	return t.query(q)
+	return t.ds.Query(q)
 }
 
 var ErrClosed = errors.New("datastore closed")
 
-func (t *txn) query(q dsq.Query) (dsq.Results, error) {
+func query(txn *badger.Txn, q dsq.Query) (dsq.Results, error) {
 	prefix := []byte(q.Prefix)
 	opt := badger.DefaultIteratorOptions
 	opt.PrefetchValues = !q.KeysOnly
@@ -330,8 +310,6 @@ func (t *txn) query(q dsq.Query) (dsq.Results, error) {
 			opt.Reverse = true
 		}
 	}
-
-	txn := t.txn
 
 	it := txn.NewIterator(opt)
 	it.Seek(prefix)
@@ -362,9 +340,7 @@ func (t *txn) query(q dsq.Query) (dsq.Results, error) {
 		// this iterator is part of an implicit transaction, so when
 		// we're done we must discard the transaction. It's safe to
 		// discard the txn it because it contains the iterator only.
-		if t.implicit {
-			defer t.discard()
-		}
+		defer txn.Discard()
 
 		defer it.Close()
 
@@ -397,9 +373,6 @@ func (t *txn) query(q dsq.Query) (dsq.Results, error) {
 
 			select {
 			case qrb.Output <- result:
-			case <-t.ds.closing: // datastore closing.
-				closedEarly = true
-				return
 			case <-worker.Closing(): // client told us to close early
 				return
 			}
@@ -426,11 +399,7 @@ func (t *txn) query(q dsq.Query) (dsq.Results, error) {
 
 func (t *txn) Commit() error {
 
-	return t.commit()
-}
-
-func (t *txn) commit() error {
-	return t.txn.Commit()
+	return nil
 }
 
 // Alias to commit
@@ -440,13 +409,9 @@ func (t *txn) Close() error {
 }
 
 func (t *txn) close() error {
-	return t.txn.Commit()
+	return nil
 }
 
 func (t *txn) Discard() {
-	t.discard()
-}
 
-func (t *txn) discard() {
-	t.txn.Discard()
 }
