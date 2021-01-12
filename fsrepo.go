@@ -18,21 +18,21 @@ func Create(path string) (*Datastore, error) {
 		return nil, err
 	}
 
-	defaultOptions := badger.DefaultOptions("")
+	opts := badger.DefaultOptions("")
 
 	// This is to optimize the database on close so it can be opened
 	// read-only and efficiently queried. We don't do that and hanging on
 	// stop isn't nice.
-	defaultOptions.CompactL0OnClose = false
+	opts = opts.WithCompactL0OnClose(false)
 
-	defaultOptions.SyncWrites = true
-	defaultOptions.ValueThreshold = 1024
+	opts = opts.WithValueLogLoadingMode(options.FileIO)
+	opts = opts.WithTableLoadingMode(options.FileIO)
+	opts = opts.WithSyncWrites(true)
+	opts = opts.WithValueThreshold(1024)
+	opts = opts.WithValueLogFileSize(128 << 20) // 128 MB value log file
+	opts = opts.WithMaxCacheSize(8 << 20)
+	opts = opts.WithMaxTableSize(8 << 20)
+	opts = opts.WithKeepL0InMemory(false)
 
-	// Uses less memory, is no slower when writing, and is faster when
-	// reading (in some tests).
-	defaultOptions.ValueLogLoadingMode = options.FileIO
-
-	defaultOptions.TableLoadingMode = options.FileIO
-
-	return NewDatastore(p, defaultOptions)
+	return NewDatastore(p, opts)
 }
