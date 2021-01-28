@@ -8,6 +8,7 @@ import (
 	"github.com/ipfs/go-bitswap"
 	bsnet "github.com/ipfs/go-bitswap/network"
 	"github.com/ipfs/go-blockservice"
+	"github.com/ipfs/go-cid"
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
 	"github.com/ipfs/go-ipns"
 	"github.com/ipfs/go-merkledag"
@@ -39,6 +40,50 @@ import (
 var (
 	ProtocolPush protocol.ID = "/ipfs/push/1.0.0"
 )
+
+func (n *Node) Push(pid string, msg []byte) (int, error) {
+	var id peer.ID
+
+	var Timeout = time.Second * 3
+	var num int
+	var err error
+
+	id, err = peer.Decode(pid)
+	if err != nil {
+		return 0, err
+	}
+	clientConn, err := gostream.Dial(context.Background(),
+		n.Host, id, ProtocolPush)
+
+	if err != nil {
+		return 0, err
+	}
+
+	defer clientConn.Close()
+	err = clientConn.SetDeadline(time.Now().Add(Timeout))
+	if err != nil {
+		return 0, err
+	}
+
+	num, err = clientConn.Write(msg)
+	if err != nil && err != io.EOF {
+		return 0, err
+	}
+
+	buf := make([]byte, 2)
+	cum, err := clientConn.Read(buf)
+
+	if err != nil && err != io.EOF {
+		n.Listener.Error(err.Error())
+		return 0, err
+	}
+
+	if string(buf[:cum]) != "ok" {
+		return 0, err
+	}
+
+	return num, nil
+}
 
 const (
 	MaxSize = 1024
@@ -164,8 +209,6 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 		return fmt.Errorf("constructPeerHost: %s", err)
 	}
 
-	//resolver := resolver.NewBasicResolver(n.DagService) // TODO not used ???
-
 	n.Listener.Info("New Node...")
 
 	printSwarmAddrs(n)
@@ -175,8 +218,8 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 	n.Running = true
 	n.Shutdown = false
 
-	go reachable(n, ctx)
 	go receiver(n)
+	go reachable(n, ctx)
 
 	for {
 		if n.Shutdown {
@@ -184,55 +227,10 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 			n.Listener.Info("Daemon is shutdown")
 			return nil
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(250 * time.Millisecond)
 	}
 
 	return nil
-}
-
-func (n *Node) Push(pid string, msg []byte) (int, error) {
-	var id peer.ID
-
-	var Timeout = time.Second * 3
-	var num int
-	var err error
-
-	id, err = peer.Decode(pid)
-	if err != nil {
-		return 0, err
-	}
-	clientConn, err := gostream.Dial(context.Background(),
-		n.Host, id, ProtocolPush)
-
-	if err != nil {
-		return 0, err
-	}
-
-	defer clientConn.Close()
-
-	err = clientConn.SetDeadline(time.Now().Add(Timeout))
-	if err != nil {
-		return 0, err
-	}
-
-	num, err = clientConn.Write(msg)
-	if err != nil && err != io.EOF {
-		return 0, err
-	}
-
-	buf := make([]byte, 2)
-	cum, err := clientConn.Read(buf)
-
-	if err != nil && err != io.EOF {
-		n.Listener.Error(err.Error())
-		return 0, err
-	}
-
-	if string(buf[:cum]) != "ok" {
-		return 0, err
-	}
-
-	return num, nil
 }
 
 func receiver(n *Node) {
@@ -249,9 +247,10 @@ func receiver(n *Node) {
 			return
 		}
 
+		pid := conn.RemoteAddr().String()
 		if !n.Shutdown {
 
-			buf := make([]byte, MaxSize)
+			buf := make([]byte, 59)
 			err = conn.SetDeadline(time.Now().Add(Timeout))
 			if err != nil {
 				n.Listener.Error(err.Error())
@@ -261,12 +260,27 @@ func receiver(n *Node) {
 				n.Listener.Error(err.Error())
 			} else {
 				if n.Pushing {
-					n.Listener.Push(buf[:num], conn.RemoteAddr().String())
-					_, err = conn.Write([]byte("ok"))
+					id, err := cid.Decode(string(buf[:num]))
+					if err == nil {
+						n.Listener.Push(id.String(), pid)
+						_, err = conn.Write([]byte("ok"))
+						if err != nil {
+							n.Listener.Error(err.Error())
+						}
+					} else {
+						_, err = conn.Write([]byte("ko"))
+						if err != nil {
+							n.Listener.Error(err.Error())
+						}
+					}
 				} else {
 					_, err = conn.Write([]byte("ko"))
+					if err != nil {
+						n.Listener.Error(err.Error())
+					}
 				}
 			}
+
 			err = conn.Close()
 			if err != nil {
 				n.Listener.Error(err.Error())
@@ -276,6 +290,7 @@ func receiver(n *Node) {
 		}
 	}
 }
+
 func reachable(n *Node, ctx context.Context) {
 	subReachability, _ := n.Host.EventBus().Subscribe(new(event.EvtLocalReachabilityChanged))
 	defer subReachability.Close()

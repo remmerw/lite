@@ -51,7 +51,6 @@ type Node struct {
 	Host              host.Host
 	ConnectionManager connmgr.ConnManager
 	Routing           routing.Routing
-
 }
 
 type Listener interface {
@@ -65,7 +64,7 @@ type Listener interface {
 	Leeching(int)
 	ShouldConnect(string) bool
 	ShouldGate(string) bool
-	Push([]byte, string)
+	Push(string, string)
 }
 
 func NewNode(listener Listener, repoPath string) *Node {
