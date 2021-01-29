@@ -186,8 +186,8 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 		n.Routing, err = dht.New(
 			ctx, host,
 			dht.Concurrency(10),
+			dht.DisableAutoRefresh(),
 			dht.Mode(dht.ModeClient),
-			dht.Datastore(n.DataStore),
 			dht.Validator(n.RecordValidator))
 
 		bitSwapNetwork := bsnet.NewFromIpfsHost(host, n.Routing)
