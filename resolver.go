@@ -26,6 +26,16 @@ type ResolveInfo interface {
 	Close() bool
 }
 
+func (n *Node) DecodeName(name string) string {
+
+	pid, err := peer.Decode(name)
+	if err != nil {
+		n.Listener.Error("Error decoding name")
+		return ""
+	}
+	return pid.Pretty()
+}
+
 func (n *Node) ResolveName(info ResolveInfo, name string, offline bool, dhtRecords int) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -117,7 +127,7 @@ func resolveIpnsOnceAsync(ctx context.Context, listener Listener, r routing.Valu
 				p := string(entry.GetValue())
 				seq := entry.GetSequence()
 
-				emitOnceResult(ctx, out, Result{Path: p, Seq:seq})
+				emitOnceResult(ctx, out, Result{Path: p, Seq: seq})
 			case <-ctx.Done():
 				return
 			}

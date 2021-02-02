@@ -43,7 +43,7 @@ type DirEntry struct {
 	Err error
 }
 
-func (n *Node) Ls(paths string, info LsInfoClose) error {
+func (n *Node) Ls(paths string, info LsInfoClose, resolveChildren bool) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -65,7 +65,7 @@ func (n *Node) Ls(paths string, info LsInfoClose) error {
 		}
 	}(info)
 
-	pchan, err := n.Lss(ctx, path.New(paths), true)
+	pchan, err := n.Lss(ctx, path.New(paths), resolveChildren)
 
 	if err != nil {
 		return err
@@ -205,7 +205,6 @@ func (n *Node) processLink(ctx context.Context, dag ipld.DAGService, linkres ft.
 			lnk.Err = err
 			break
 		}
-
 		if pn, ok := linkNode.(*merkledag.ProtoNode); ok {
 			d, err := ft.FSNodeFromBytes(pn.Data())
 			if err != nil {
@@ -222,6 +221,7 @@ func (n *Node) processLink(ctx context.Context, dag ipld.DAGService, linkres ft.
 			}
 			lnk.Size = d.FileSize()
 		}
+
 	}
 
 	return lnk
