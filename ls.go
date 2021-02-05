@@ -6,7 +6,7 @@ import (
 	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-cidutil/cidenc"
 	ipld "github.com/ipfs/go-ipld-format"
-	merkledag "github.com/ipfs/go-merkledag"
+	"github.com/ipfs/go-merkledag"
 	ipfspath "github.com/ipfs/go-path"
 	"github.com/ipfs/go-path/resolver"
 	ft "github.com/ipfs/go-unixfs"
@@ -16,6 +16,10 @@ import (
 	"sync"
 	"time"
 )
+
+type LsClose interface {
+	Close() bool
+}
 
 type LsInfoClose interface {
 	LsInfo(NAME string, HASH string, SIZE int, TYPE int32)
@@ -41,6 +45,34 @@ type DirEntry struct {
 	Type int32  // The type of the file.
 
 	Err error
+}
+
+func (n *Node) Resolve(paths string, close LsClose) string {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var err error
+
+	go func(stream LsClose) {
+		for {
+			if ctx.Err() != nil {
+				break
+			}
+			if stream.Close() {
+				cancel()
+				break
+			}
+			time.Sleep(time.Millisecond * 500)
+		}
+	}(close)
+
+	dagService := merkledag.NewReadOnlyDagService(merkledag.NewSession(ctx, n.DagService))
+
+	dagnode, err := n.ResolveNode(ctx, dagService, path.New(paths))
+	if err != nil {
+		return ""
+	}
+	return dagnode.Cid().String()
 }
 
 func (n *Node) Ls(paths string, info LsInfoClose, resolveChildren bool) error {

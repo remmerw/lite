@@ -85,10 +85,6 @@ func (n *Node) Push(pid string, msg []byte) (int, error) {
 	return num, nil
 }
 
-const (
-	MaxSize = 1024
-)
-
 func (n *Node) Daemon(EnablePrivateSharing bool) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -134,11 +130,7 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 	}
 
 	// hash security
-	bs := blockstore.NewBlockstore(n.DataStore)
-
-	bs = blockstore.NewIdStore(bs)
-	gcLocker := blockstore.NewGCLocker()
-	n.BlockStore = blockstore.NewGCBlockstore(bs, gcLocker)
+	n.BlockStore = blockstore.NewBlockstore(n.DataStore)
 
 	grace, err := time.ParseDuration(n.GracePeriod)
 	if err != nil {
@@ -195,7 +187,7 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 			bitSwapNetwork = NewLiteHost(host, n.Listener)
 		}
 
-		bs = &VerifBS{Blockstore: bs, Listener: n.Listener}
+		bs := &VerifBS{Blockstore: n.BlockStore, Listener: n.Listener}
 		exchange := bitswap.New(ctx, bitSwapNetwork, bs,
 			bitswap.ProvideEnabled(false))
 
