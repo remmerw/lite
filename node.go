@@ -25,6 +25,7 @@ type Node struct {
 	LowWater    int
 	HighWater   int
 	Port        int
+	Concurrency int
 
 	PeerID     string
 	PrivateKey string

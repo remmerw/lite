@@ -177,7 +177,7 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 
 		n.Routing, err = dht.New(
 			ctx, host,
-			dht.Concurrency(10),
+			dht.Concurrency(n.Concurrency),
 			dht.DisableAutoRefresh(),
 			dht.Mode(dht.ModeClient),
 			dht.Validator(n.RecordValidator))
