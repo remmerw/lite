@@ -47,6 +47,38 @@ type DirEntry struct {
 	Err error
 }
 
+func (n *Node) IsDir(paths string, close LsClose) (bool, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var err error
+
+	go func(stream LsClose) {
+		for {
+			if ctx.Err() != nil {
+				break
+			}
+			if stream.Close() {
+				cancel()
+				break
+			}
+			time.Sleep(time.Millisecond * 500)
+		}
+	}(close)
+
+	dagService := merkledag.NewReadOnlyDagService(merkledag.NewSession(ctx, n.DagService))
+
+	dagnode, err := n.ResolveNode(ctx, dagService, path.New(paths))
+	if err != nil {
+		return false, err
+	}
+	_, err = uio.NewDirectoryFromNode(dagService, dagnode)
+	if err == uio.ErrNotADir {
+		return false, nil
+	}
+	return true, nil
+}
+
 func (n *Node) Resolve(paths string, close LsClose) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
