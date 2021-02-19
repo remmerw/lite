@@ -61,7 +61,7 @@ func (n *Node) DhtFindProvs(mcid string, provider Provider, numProviders int, cl
 				cancel()
 				break
 			}
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
 		}
 	}(close)
 
@@ -102,7 +102,7 @@ func (n *Node) DhtProvide(mcid string, close DhtClose) error {
 				cancel()
 				break
 			}
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
 		}
 	}(close)
 
@@ -119,8 +119,6 @@ func (n *Node) DhtProvideTimeout(mcid string, timeout int32) error {
 	cido := path.New(mcid)
 	return n.Provide(cctx, cido)
 }
-
-
 
 func (n *Node) FindPeer(ctx context.Context, p peer.ID) (peer.AddrInfo, error) {
 
