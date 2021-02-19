@@ -62,7 +62,7 @@ func (n *Node) IsDir(paths string, close LsClose) (bool, error) {
 				cancel()
 				break
 			}
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
 		}
 	}(close)
 
@@ -94,7 +94,7 @@ func (n *Node) Resolve(paths string, close LsClose) string {
 				cancel()
 				break
 			}
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
 		}
 	}(close)
 
@@ -125,7 +125,7 @@ func (n *Node) Ls(paths string, info LsInfoClose, resolveChildren bool) error {
 				cancel()
 				break
 			}
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
 		}
 	}(info)
 

@@ -35,10 +35,11 @@ type Reader struct {
 }
 
 type Loader struct {
-	DagReader uio.DagReader
-	Size      int64
-	Data      []byte
-	Read      int
+	DagReader  uio.DagReader
+	Size       int64
+	Data       []byte
+	Read       int
+	Responsive int
 }
 
 type LoaderClose interface {
@@ -87,7 +88,7 @@ func (n *Node) GetLoader(paths string, close LoaderClose) (*Loader, error) {
 				cancel()
 				break
 			}
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
 		}
 	}(close)
 
@@ -108,7 +109,7 @@ func (n *Node) GetLoader(paths string, close LoaderClose) (*Loader, error) {
 
 	size := dr.Size()
 	done = true
-	return &Loader{DagReader: dr, Size: int64(size)}, nil
+	return &Loader{DagReader: dr, Size: int64(size), Responsive: n.Responsive}, nil
 
 }
 
@@ -284,7 +285,7 @@ func (n *Node) Stream(stream WriterStream) (string, error) {
 				cancel()
 				break
 			}
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
 		}
 	}(stream)
 
@@ -303,7 +304,6 @@ func (n *Node) Stream(stream WriterStream) (string, error) {
 	}
 	return path.IpfsPath(nd.Cid()).Cid().String(), nil
 }
-
 
 func (n *Node) GetReader(paths string) (*Reader, error) {
 
@@ -342,7 +342,6 @@ func (n *Node) GetReader(paths string) (*Reader, error) {
 
 }
 
-
 func (fd *Reader) Close() error {
 	return fd.DagReader.Close()
 }
@@ -372,7 +371,7 @@ func (fd *Loader) Seek(position int64, close LoaderClose) error {
 				fd.Close()
 				break
 			}
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Duration(fd.Responsive) * time.Millisecond)
 		}
 	}(close)
 	_, err := fd.DagReader.Seek(position, 0)
@@ -396,7 +395,7 @@ func (fd *Loader) Load(size int64, close LoaderClose) error {
 				fd.Close()
 				break
 			}
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Duration(fd.Responsive) * time.Millisecond)
 		}
 	}(close)
 

@@ -49,7 +49,7 @@ func (n *Node) ResolveName(info ResolveInfo, name string, offline bool, dhtRecor
 				cancel()
 				break
 			}
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
 		}
 	}(info)
 

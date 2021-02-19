@@ -31,7 +31,7 @@ func (n *Node) PublishName(p string, close PublisherClose, sequence int) error {
 				cancel()
 				break
 			}
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
 		}
 	}(close)
 

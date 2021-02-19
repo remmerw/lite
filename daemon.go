@@ -219,7 +219,7 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 			n.Listener.Info("Daemon is shutdown")
 			return nil
 		}
-		time.Sleep(250 * time.Millisecond)
+		time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
 	}
 
 	return nil
