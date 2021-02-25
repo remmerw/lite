@@ -5,7 +5,6 @@ import (
 	"github.com/ipfs/go-blockservice"
 	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-cidutil/cidenc"
-	blockstore "github.com/ipfs/go-ipfs-blockstore"
 	offlinexch "github.com/ipfs/go-ipfs-exchange-offline"
 	ipld "github.com/ipfs/go-ipld-format"
 	dag "github.com/ipfs/go-merkledag"
@@ -32,11 +31,8 @@ func (n *Node) Rm(paths string, recursive bool) error {
 
 	enc := cidenc.Default()
 
-	bb := blockstore.NewBlockstore(n.DataStore)
-	gclocker := blockstore.NewGCLocker()
-	gcbs := blockstore.NewGCBlockstore(bb, gclocker)
-	exchange := offlinexch.Exchange(gcbs)
-	blocks := blockservice.New(gcbs, exchange)
+	exchange := offlinexch.Exchange(n.BlockStore)
+	blocks := blockservice.New(n.BlockStore, exchange)
 	dags := dag.NewDAGService(blocks)
 
 	top, err := ResolveNode(ctx, dags, path.New(paths))
@@ -63,14 +59,14 @@ func (n *Node) Rm(paths string, recursive bool) error {
 				return err
 			}
 			cids := []cid.Cid{o.Cid()}
-			err = n.RmBlocks(gcbs, cids)
+			err = n.RmBlocks(cids)
 			if err != nil {
 				return err
 			}
 		}
 	}
 	cids := []cid.Cid{top.Cid()}
-	return n.RmBlocks(gcbs, cids)
+	return n.RmBlocks(cids)
 
 }
 
@@ -78,12 +74,9 @@ func (n *Node) Rm(paths string, recursive bool) error {
 // It returns a channel where objects of type RemovedBlock are placed, when
 // not using the Quiet option. Block removal is asynchronous and will
 // skip any pinned blocks.
-func (n *Node) RmBlocks(blocks blockstore.GCBlockstore, cids []cid.Cid) error {
+func (n *Node) RmBlocks(cids []cid.Cid) error {
 	// make the channel large enough to hold any result to avoid
 	// blocking while holding the GCLock
-
-	unlocker := blocks.GCLock()
-	defer unlocker.Unlock()
 
 	for _, c := range cids {
 		// Kept for backwards compatibility. We may want to
@@ -100,7 +93,7 @@ func (n *Node) RmBlocks(blocks blockstore.GCBlockstore, cids []cid.Cid) error {
 				continue
 			}*/
 
-		err := blocks.DeleteBlock(c)
+		err := n.BlockStore.DeleteBlock(c)
 		if err != nil {
 			n.Listener.Error(err.Error())
 		} else {

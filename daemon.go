@@ -9,7 +9,6 @@ import (
 	bsnet "github.com/ipfs/go-bitswap/network"
 	"github.com/ipfs/go-blockservice"
 	"github.com/ipfs/go-cid"
-	blockstore "github.com/ipfs/go-ipfs-blockstore"
 	"github.com/ipfs/go-ipns"
 	"github.com/ipfs/go-merkledag"
 	"github.com/libp2p/go-libp2p"
@@ -128,9 +127,6 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 	if err != nil {
 		return err
 	}
-
-	// hash security
-	n.BlockStore = blockstore.NewBlockstore(n.DataStore)
 
 	grace, err := time.ParseDuration(n.GracePeriod)
 	if err != nil {

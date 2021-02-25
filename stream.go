@@ -7,7 +7,7 @@ import (
 	"github.com/ipfs/go-blockservice"
 	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-cidutil"
-	blockstore "github.com/ipfs/go-ipfs-blockstore"
+	bs "github.com/ipfs/go-ipfs-blockstore"
 	offlinexch "github.com/ipfs/go-ipfs-exchange-offline"
 	files "github.com/ipfs/go-ipfs-files"
 	ipld "github.com/ipfs/go-ipld-format"
@@ -149,7 +149,7 @@ func (n *Node) getFileAdder(ctx context.Context) (*Adder, error) {
 		return nil, err
 	}
 
-	gcbs := blockstore.NewBlockstore(n.DataStore)
+	gcbs := n.BlockStore
 	gcbs = &BS{Blockstore: gcbs}
 
 	exchange := offlinexch.Exchange(gcbs)
@@ -251,7 +251,7 @@ func (n *Node) RemoveLinkFromDir(dir string, linkName string) (string, error) {
 }
 
 type BS struct {
-	blockstore.Blockstore
+	bs.Blockstore
 }
 
 func (bs *BS) Put(b blocks.Block) error {
@@ -313,7 +313,7 @@ func (n *Node) GetReader(paths string) (*Reader, error) {
 
 	p := path.New(paths)
 
-	gcbs := blockstore.NewBlockstore(n.DataStore)
+	gcbs := n.BlockStore
 
 	exchange := offlinexch.Exchange(gcbs)
 	bs := blockservice.New(gcbs, exchange)
