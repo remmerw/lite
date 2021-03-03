@@ -14,15 +14,11 @@ import (
 	"github.com/libp2p/go-libp2p-core/routing"
 )
 
-type PublisherClose interface {
-	Close() bool
-}
-
-func (n *Node) PublishName(p string, close PublisherClose, sequence int) error {
+func (n *Node) PublishName(p string, close Closeable, sequence int) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go func(stream PublisherClose) {
+	go func(stream Closeable) {
 		for {
 			if ctx.Err() != nil {
 				break

@@ -42,10 +42,6 @@ type Loader struct {
 	Responsive int
 }
 
-type LoaderClose interface {
-	Close() bool
-}
-
 type WriterStream interface {
 	Read() (n int, err error)
 	Data() []byte
@@ -70,13 +66,13 @@ func (fd *Writer) Read(p []byte) (n int, err error) {
 
 }
 
-func (n *Node) GetLoader(paths string, close LoaderClose) (*Loader, error) {
+func (n *Node) GetLoader(paths string, close Closeable) (*Loader, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var err error
 	var done bool = false
 
-	go func(stream LoaderClose) {
+	go func(stream Closeable) {
 		for {
 			if ctx.Err() != nil {
 				break
@@ -316,8 +312,8 @@ func (n *Node) GetReader(paths string) (*Reader, error) {
 	gcbs := n.BlockStore
 
 	exchange := offlinexch.Exchange(gcbs)
-	bs := blockservice.New(gcbs, exchange)
-	dags := dag.NewDAGService(bs)
+	ebs := blockservice.New(gcbs, exchange)
+	dags := dag.NewDAGService(ebs)
 
 	dagReadOnlyService := dag.NewReadOnlyDagService(dags)
 
@@ -360,9 +356,9 @@ func (fd *Loader) Close() error {
 	return fd.DagReader.Close()
 }
 
-func (fd *Loader) Seek(position int64, close LoaderClose) error {
+func (fd *Loader) Seek(position int64, close Closeable) error {
 	var done = false
-	go func(stream LoaderClose) {
+	go func(stream Closeable) {
 		for {
 			if done {
 				break
@@ -383,10 +379,10 @@ func (fd *Loader) Seek(position int64, close LoaderClose) error {
 	return nil
 }
 
-func (fd *Loader) Load(size int64, close LoaderClose) error {
+func (fd *Loader) Load(size int64, close Closeable) error {
 
 	var done = false
-	go func(stream LoaderClose) {
+	go func(stream Closeable) {
 		for {
 			if done {
 				break

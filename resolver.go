@@ -1,8 +1,6 @@
 package lite
 
 import (
-	"sync"
-
 	"context"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/routing"
@@ -12,7 +10,7 @@ import (
 
 type ResolveInfo interface {
 	Resolved(Data []byte)
-	Close() bool
+	Closeable
 }
 
 func (n *Node) DecodeName(name string) string {
@@ -65,11 +63,10 @@ func (n *Node) ResolveName(info ResolveInfo, name string, offline bool, dhtRecor
 		cancel()
 		return err
 	}
-	wg := &sync.WaitGroup{}
+
 	for val := range vals {
 		info.Resolved(val)
 	}
-	wg.Wait()
 
 	return nil
 }

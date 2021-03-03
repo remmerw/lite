@@ -13,17 +13,12 @@ import (
 	uio "github.com/ipfs/go-unixfs/io"
 	"github.com/ipfs/interface-go-ipfs-core/path"
 	gopath "path"
-	"sync"
 	"time"
 )
 
-type LsClose interface {
-	Close() bool
-}
-
 type LsInfoClose interface {
 	LsInfo(NAME string, HASH string, SIZE int, TYPE int32)
-	Close() bool
+	Closeable
 }
 
 const (
@@ -47,13 +42,13 @@ type DirEntry struct {
 	Err error
 }
 
-func (n *Node) IsDir(paths string, close LsClose) (bool, error) {
+func (n *Node) IsDir(paths string, close Closeable) (bool, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	var err error
 
-	go func(stream LsClose) {
+	go func(stream Closeable) {
 		for {
 			if ctx.Err() != nil {
 				break
@@ -79,13 +74,13 @@ func (n *Node) IsDir(paths string, close LsClose) (bool, error) {
 	return true, nil
 }
 
-func (n *Node) Resolve(paths string, close LsClose) string {
+func (n *Node) Resolve(paths string, close Closeable) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	var err error
 
-	go func(stream LsClose) {
+	go func(stream Closeable) {
 		for {
 			if ctx.Err() != nil {
 				break
@@ -135,8 +130,6 @@ func (n *Node) Ls(paths string, info LsInfoClose, resolveChildren bool) error {
 		return err
 	}
 
-	wg := &sync.WaitGroup{}
-
 	for p := range pchan {
 
 		if p.Err != nil {
@@ -145,8 +138,6 @@ func (n *Node) Ls(paths string, info LsInfoClose, resolveChildren bool) error {
 
 		info.LsInfo(p.Name, enc.Encode(p.Cid), int(int32(p.Size)), p.Type)
 	}
-
-	wg.Wait()
 
 	return nil
 }

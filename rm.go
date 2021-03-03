@@ -9,7 +9,6 @@ import (
 	ipld "github.com/ipfs/go-ipld-format"
 	dag "github.com/ipfs/go-merkledag"
 	"github.com/ipfs/interface-go-ipfs-core/path"
-	//"github.com/ipfs/interface-go-ipfs-core/path"
 )
 
 type RefWriter struct {

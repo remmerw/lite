@@ -57,7 +57,41 @@ func (n *Node) IsConnected(pid string) (bool, error) {
 
 }
 
-func (n *Node) SwarmConnect(addr string, timeout int32) (bool, error) {
+func (n *Node) SwarmConnect(addr string, close Closeable) (bool, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func(stream Closeable) {
+		for {
+			if ctx.Err() != nil {
+				break
+			}
+			if stream.Close() {
+				cancel()
+				break
+			}
+			time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
+		}
+	}(close)
+	var err error
+
+	pis, err := parseAddresses(addr)
+	if err != nil {
+		return false, err
+	}
+
+	for _, pi := range pis {
+		err = n.Connect(ctx, pi)
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (n *Node) SwarmConnectTimeout(addr string, timeout int32) (bool, error) {
 	dnsTimeout := time.Duration(timeout) * time.Second
 
 	cctx, cancel := context.WithTimeout(context.Background(), dnsTimeout)

@@ -7,16 +7,11 @@ import (
 	"github.com/ipfs/interface-go-ipfs-core/path"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/routing"
-	"sync"
 	"time"
 )
 
 type Provider interface {
 	Pid(Message string)
-}
-
-type DhtClose interface {
-	Close() bool
 }
 
 func (n *Node) DhtFindProvsTimeout(mcid string, provider Provider, numProviders int, timeout int32) error {
@@ -37,22 +32,20 @@ func (n *Node) DhtFindProvsTimeout(mcid string, provider Provider, numProviders 
 	if err != nil {
 		return err
 	}
-	wg := &sync.WaitGroup{}
 
 	for p := range pchan {
 		np := p
 		provider.Pid(np.ID.Pretty())
 	}
-	wg.Wait()
 
 	return nil
 }
 
-func (n *Node) DhtFindProvs(mcid string, provider Provider, numProviders int, close DhtClose) error {
+func (n *Node) DhtFindProvs(mcid string, provider Provider, numProviders int, close Closeable) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go func(stream DhtClose) {
+	go func(stream Closeable) {
 		for {
 			if ctx.Err() != nil {
 				break
@@ -77,23 +70,20 @@ func (n *Node) DhtFindProvs(mcid string, provider Provider, numProviders int, cl
 	if err != nil {
 		return err
 	}
-	wg := &sync.WaitGroup{}
 
 	for p := range pchan {
 		np := p
 		provider.Pid(np.ID.Pretty())
 	}
 
-	wg.Wait()
-
 	return nil
 }
 
-func (n *Node) DhtProvide(mcid string, close DhtClose) error {
+func (n *Node) DhtProvide(mcid string, close Closeable) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go func(stream DhtClose) {
+	go func(stream Closeable) {
 		for {
 			if ctx.Err() != nil {
 				break
@@ -106,8 +96,7 @@ func (n *Node) DhtProvide(mcid string, close DhtClose) error {
 		}
 	}(close)
 
-	cido := path.New(mcid)
-	return n.Provide(ctx, cido)
+	return n.Provide(ctx, path.New(mcid))
 }
 
 func (n *Node) DhtProvideTimeout(mcid string, timeout int32) error {

@@ -70,6 +70,10 @@ type Listener interface {
 	BlockDelete(string)
 }
 
+type Closeable interface {
+	Close() bool
+}
+
 func NewNode(listener Listener) *Node {
 	return &Node{Listener: listener, BlockStore: NewBlockstore(listener), Running: false}
 }
