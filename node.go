@@ -2,11 +2,14 @@ package lite
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	_ "expvar"
 	"github.com/ipfs/go-blockservice"
+	"github.com/ipfs/go-cid"
 	bs "github.com/ipfs/go-ipfs-blockstore"
+	exchange "github.com/ipfs/go-ipfs-exchange-interface"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/libp2p/go-libp2p-core/connmgr"
 	ci "github.com/libp2p/go-libp2p-core/crypto"
@@ -17,6 +20,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/routing"
 	record "github.com/libp2p/go-libp2p-record"
 	_ "net/http/pprof"
+	"time"
 )
 
 type Node struct {
@@ -41,6 +45,7 @@ type Node struct {
 	Pushing        bool
 	Listener       Listener
 
+	Exchange          exchange.Interface
 	PeerStore         peerstore.Peerstore
 	RecordValidator   record.Validator
 	BlockStore        bs.Blockstore
@@ -84,6 +89,37 @@ func (n *Node) CheckSwarmKey(key string) error {
 		return err
 	}
 	return nil
+}
+
+func (n *Node) GetBlock(closeable Closeable, hash string) (string, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func(stream Closeable) {
+		for {
+			if ctx.Err() != nil {
+				break
+			}
+			if stream.Close() {
+				cancel()
+				break
+			}
+			time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
+		}
+	}(closeable)
+
+	c, err := cid.Decode(hash)
+	if err != nil {
+		return "", err
+	}
+
+	block, err := n.Exchange.GetBlock(ctx, c)
+	if err != nil {
+		return "", err
+	}
+
+	return block.Cid().String(), nil
+
 }
 
 func (n *Node) Identity() error {

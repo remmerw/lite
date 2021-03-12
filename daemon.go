@@ -184,10 +184,10 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 		}
 
 		bs := &VerifBS{Blockstore: n.BlockStore, Listener: n.Listener}
-		exchange := bitswap.New(ctx, bitSwapNetwork, bs,
+		n.Exchange = bitswap.New(ctx, bitSwapNetwork, bs,
 			bitswap.ProvideEnabled(false))
 
-		n.BlockService = blockservice.New(n.BlockStore, exchange)
+		n.BlockService = blockservice.New(n.BlockStore, n.Exchange)
 		n.DagService = merkledag.NewDAGService(n.BlockService)
 		return n.Routing, err
 	}))
