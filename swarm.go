@@ -2,13 +2,12 @@ package lite
 
 import (
 	"context"
-	coreiface "github.com/ipfs/interface-go-ipfs-core"
+
 	"github.com/libp2p/go-libp2p-core/network"
 	inet "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	swarm "github.com/libp2p/go-libp2p-swarm"
 	ma "github.com/multiformats/go-multiaddr"
-	"sort"
 	"time"
 )
 
@@ -57,7 +56,7 @@ func (n *Node) IsConnected(pid string) (bool, error) {
 
 }
 
-func (n *Node) SwarmConnect(addr string, close Closeable) (bool, error) {
+func (n *Node) SwarmConnect(addr string, protect bool, close Closeable) (bool, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -81,7 +80,7 @@ func (n *Node) SwarmConnect(addr string, close Closeable) (bool, error) {
 	}
 
 	for _, pi := range pis {
-		err = n.Connect(ctx, pi)
+		err = n.Connect(ctx, pi, protect)
 		if err != nil {
 			return false, err
 		}
@@ -91,7 +90,7 @@ func (n *Node) SwarmConnect(addr string, close Closeable) (bool, error) {
 	return false, nil
 }
 
-func (n *Node) SwarmConnectTimeout(addr string, timeout int32) (bool, error) {
+func (n *Node) SwarmConnectTimeout(addr string, timeout int32, protect bool) (bool, error) {
 	dnsTimeout := time.Duration(timeout) * time.Second
 
 	cctx, cancel := context.WithTimeout(context.Background(), dnsTimeout)
@@ -104,7 +103,7 @@ func (n *Node) SwarmConnectTimeout(addr string, timeout int32) (bool, error) {
 	}
 
 	for _, pi := range pis {
-		err = n.Connect(cctx, pi)
+		err = n.Connect(cctx, pi, protect)
 		if err != nil {
 			return false, err
 		}
@@ -138,7 +137,7 @@ func resolveAddr(addrs string) (ma.Multiaddr, error) {
 const connectionManagerTag = "user-connect"
 const connectionManagerWeight = 100
 
-func (n *Node) Connect(ctx context.Context, pi peer.AddrInfo) error {
+func (n *Node) Connect(ctx context.Context, pi peer.AddrInfo, protect bool) error {
 
 	if swrm, ok := n.Host.Network().(*swarm.Swarm); ok {
 		swrm.Backoff().Clear(pi.ID)
@@ -148,8 +147,10 @@ func (n *Node) Connect(ctx context.Context, pi peer.AddrInfo) error {
 		return err
 	}
 
-	n.Host.ConnManager().TagPeer(pi.ID, connectionManagerTag, connectionManagerWeight)
-	n.Host.ConnManager().Protect(pi.ID, connectionManagerTag)
+	if protect {
+		n.Host.ConnManager().TagPeer(pi.ID, connectionManagerTag, connectionManagerWeight)
+		n.Host.ConnManager().Protect(pi.ID, connectionManagerTag)
+	}
 	return nil
 }
 
@@ -223,37 +224,4 @@ func (n *Node) SwarmPeers(stream PeerStream) error {
 		stream.Peer(c.RemotePeer().Pretty())
 	}
 	return nil
-}
-
-func (n *Node) KnownAddrs() (map[peer.ID][]ma.Multiaddr, error) {
-	if n.Host == nil {
-		return nil, coreiface.ErrOffline
-	}
-
-	addrs := make(map[peer.ID][]ma.Multiaddr)
-	ps := n.Host.Network().Peerstore()
-	for _, p := range ps.Peers() {
-		addrs[p] = append(addrs[p], ps.Addrs(p)...)
-		sort.Slice(addrs[p], func(i, j int) bool {
-			return addrs[p][i].String() < addrs[p][j].String()
-		})
-	}
-
-	return addrs, nil
-}
-
-func (n *Node) LocalAddrs() ([]ma.Multiaddr, error) {
-	if n.Host == nil {
-		return nil, coreiface.ErrOffline
-	}
-
-	return n.Host.Addrs(), nil
-}
-
-func (n *Node) ListenAddrs(context.Context) ([]ma.Multiaddr, error) {
-	if n.Host == nil {
-		return nil, coreiface.ErrOffline
-	}
-
-	return n.Host.Network().InterfaceListenAddresses()
 }

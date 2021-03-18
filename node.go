@@ -6,20 +6,20 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	_ "expvar"
-	"github.com/ipfs/go-blockservice"
-	"github.com/ipfs/go-cid"
-	bs "github.com/ipfs/go-ipfs-blockstore"
-	exchange "github.com/ipfs/go-ipfs-exchange-interface"
-	format "github.com/ipfs/go-ipld-format"
 	"github.com/libp2p/go-libp2p-core/connmgr"
 	ci "github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/libp2p/go-libp2p-core/pnet"
+	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/libp2p/go-libp2p-core/routing"
 	record "github.com/libp2p/go-libp2p-record"
+	"github.com/libp2p/go-msgio"
+	"io"
 	_ "net/http/pprof"
+	"strings"
 	"time"
 )
 
@@ -45,12 +45,8 @@ type Node struct {
 	Pushing        bool
 	Listener       Listener
 
-	Exchange          exchange.Interface
 	PeerStore         peerstore.Peerstore
 	RecordValidator   record.Validator
-	BlockStore        bs.Blockstore
-	BlockService      blockservice.BlockService
-	DagService        format.DAGService
 	Host              host.Host
 	ConnectionManager connmgr.ConnManager
 	Routing           routing.Routing
@@ -63,16 +59,9 @@ type Listener interface {
 	ReachableUnknown()
 	ReachablePublic()
 	ReachablePrivate()
-	Seeding(int)
-	Leeching(int)
-	ShouldConnect(string) bool
-	ShouldGate(string) bool
 	Push(string, string)
-	BlockPut(string, []byte)
-	BlockGet(string) []byte
-	BlockHas(string) bool
-	BlockSize(string) int
-	BlockDelete(string)
+	BitSwapData(string, []byte)
+	BitSwapError(string, string)
 }
 
 type Closeable interface {
@@ -80,7 +69,7 @@ type Closeable interface {
 }
 
 func NewNode(listener Listener) *Node {
-	return &Node{Listener: listener, BlockStore: NewBlockstore(listener), Running: false}
+	return &Node{Listener: listener, Running: false}
 }
 
 func (n *Node) CheckSwarmKey(key string) error {
@@ -91,7 +80,11 @@ func (n *Node) CheckSwarmKey(key string) error {
 	return nil
 }
 
-func (n *Node) GetBlock(closeable Closeable, hash string) (string, error) {
+type Stream struct {
+	Stream network.Stream
+}
+
+func (n *Node) NewStream(pid string, protocols string, close Closeable) (*Stream, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -106,20 +99,66 @@ func (n *Node) GetBlock(closeable Closeable, hash string) (string, error) {
 			}
 			time.Sleep(time.Duration(n.Responsive) * time.Millisecond)
 		}
-	}(closeable)
+	}(close)
 
-	c, err := cid.Decode(hash)
+	id, err := peer.Decode(pid)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	block, err := n.Exchange.GetBlock(ctx, c)
+	stream, err := n.Host.NewStream(ctx, id,
+		protocol.ConvertFromStrings(strings.Split(protocols, ";"))...)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	return &Stream{stream}, nil
+}
 
-	return block.Cid().String(), nil
+func (n *Stream) Close() error {
+	return n.Stream.Close()
+}
 
+func (n *Stream) Protocol() string {
+	return string(n.Stream.Protocol())
+}
+
+func (n *Stream) Reset() error {
+	return n.Stream.Reset()
+}
+
+func (n *Stream) WriteMessage(data []byte, timeout int32) (int, error) {
+
+	dnsTimeout := time.Duration(timeout) * time.Second
+
+	err := n.Stream.SetWriteDeadline(time.Now().Add(dnsTimeout))
+	if err != nil {
+		return 0, err
+	}
+	return n.Stream.Write(data)
+}
+
+func (n *Node) SetStreamHandler(proto string) {
+	n.Host.SetStreamHandler(protocol.ID(proto), n.handleNewStream)
+}
+func (n *Node) handleNewStream(s network.Stream) {
+	defer s.Close()
+
+	reader := msgio.NewVarintReaderSize(s, network.MessageSizeMax)
+	for {
+		p := s.Conn().RemotePeer()
+
+		received, err := reader.ReadMsg()
+		if err != nil {
+			reader.ReleaseMsg(received)
+			if err != io.EOF {
+				_ = s.Reset()
+				n.Listener.BitSwapError(p.String(), err.Error())
+			}
+			return
+		}
+		n.Listener.BitSwapData(p.String(), received)
+		reader.ReleaseMsg(received)
+	}
 }
 
 func (n *Node) Identity() error {

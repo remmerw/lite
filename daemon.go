@@ -5,12 +5,8 @@ import (
 	"context"
 	_ "expvar"
 	"fmt"
-	"github.com/ipfs/go-bitswap"
-	bsnet "github.com/ipfs/go-bitswap/network"
-	"github.com/ipfs/go-blockservice"
 	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-ipns"
-	"github.com/ipfs/go-merkledag"
 	"github.com/libp2p/go-libp2p"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"github.com/libp2p/go-libp2p-core/crypto"
@@ -178,17 +174,6 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 			dht.Mode(dht.ModeClient),
 			dht.Validator(n.RecordValidator))
 
-		bitSwapNetwork := bsnet.NewFromIpfsHost(host, n.Routing)
-		if EnablePrivateSharing {
-			bitSwapNetwork = NewLiteHost(host, n.Listener)
-		}
-
-		bs := &VerifBS{Blockstore: n.BlockStore, Listener: n.Listener}
-		n.Exchange = bitswap.New(ctx, bitSwapNetwork, bs,
-			bitswap.ProvideEnabled(false))
-
-		n.BlockService = blockservice.New(n.BlockStore, n.Exchange)
-		n.DagService = merkledag.NewDAGService(n.BlockService)
 		return n.Routing, err
 	}))
 
