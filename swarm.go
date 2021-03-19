@@ -6,7 +6,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/network"
 	inet "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
-	swarm "github.com/libp2p/go-libp2p-swarm"
 	ma "github.com/multiformats/go-multiaddr"
 	"time"
 )
@@ -138,10 +137,6 @@ const connectionManagerTag = "user-connect"
 const connectionManagerWeight = 100
 
 func (n *Node) Connect(ctx context.Context, pi peer.AddrInfo, protect bool) error {
-
-	if swrm, ok := n.Host.Network().(*swarm.Swarm); ok {
-		swrm.Backoff().Clear(pi.ID)
-	}
 
 	if err := n.Host.Connect(ctx, pi); err != nil {
 		return err

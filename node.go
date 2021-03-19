@@ -60,8 +60,8 @@ type Listener interface {
 	ReachablePublic()
 	ReachablePrivate()
 	Push(string, string)
-	BitSwapData(string, []byte)
-	BitSwapError(string, string)
+	BitSwapData(string, string, []byte)
+	BitSwapError(string, string, string)
 }
 
 type Closeable interface {
@@ -80,11 +80,7 @@ func (n *Node) CheckSwarmKey(key string) error {
 	return nil
 }
 
-type Stream struct {
-	Stream network.Stream
-}
-
-func (n *Node) NewStream(pid string, protocols string, close Closeable) (*Stream, error) {
+func (n *Node) WriteMessage(close Closeable, pid string, protocols string, data []byte, timeout int32) (int, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -103,38 +99,21 @@ func (n *Node) NewStream(pid string, protocols string, close Closeable) (*Stream
 
 	id, err := peer.Decode(pid)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	stream, err := n.Host.NewStream(ctx, id,
 		protocol.ConvertFromStrings(strings.Split(protocols, ";"))...)
 	if err != nil {
-		return nil, err
-	}
-	return &Stream{stream}, nil
-}
-
-func (n *Stream) Close() error {
-	return n.Stream.Close()
-}
-
-func (n *Stream) Protocol() string {
-	return string(n.Stream.Protocol())
-}
-
-func (n *Stream) Reset() error {
-	return n.Stream.Reset()
-}
-
-func (n *Stream) WriteMessage(data []byte, timeout int32) (int, error) {
-
-	dnsTimeout := time.Duration(timeout) * time.Second
-
-	err := n.Stream.SetWriteDeadline(time.Now().Add(dnsTimeout))
-	if err != nil {
 		return 0, err
 	}
-	return n.Stream.Write(data)
+	defer stream.Close()
+	dnsTimeout := time.Duration(timeout) * time.Second
+	err = stream.SetWriteDeadline(time.Now().Add(dnsTimeout))
+	if err != nil && err != io.EOF {
+		return 0, err
+	}
+	return stream.Write(data)
 }
 
 func (n *Node) SetStreamHandler(proto string) {
@@ -152,11 +131,11 @@ func (n *Node) handleNewStream(s network.Stream) {
 			reader.ReleaseMsg(received)
 			if err != io.EOF {
 				_ = s.Reset()
-				n.Listener.BitSwapError(p.String(), err.Error())
+				n.Listener.BitSwapError(p.String(), string(s.Protocol()), err.Error())
 			}
 			return
 		}
-		n.Listener.BitSwapData(p.String(), received)
+		n.Listener.BitSwapData(p.String(), string(s.Protocol()), received)
 		reader.ReleaseMsg(received)
 	}
 }
