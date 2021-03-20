@@ -64,6 +64,7 @@ type Listener interface {
 	ReachablePublic()
 	ReachablePrivate()
 	Push(string, string)
+	BitSwapGatge(string) bool
 	BitSwapData(string, string, []byte)
 	BitSwapError(string, string, string)
 	Connected(pretty string)
@@ -130,7 +131,9 @@ func (n *Node) handleNewStream(s network.Stream) {
 	reader := msgio.NewVarintReaderSize(s, network.MessageSizeMax)
 	for {
 		p := s.Conn().RemotePeer()
-
+		if n.Listener.BitSwapGatge(p.String()) {
+			_ = s.Reset()
+		}
 		received, err := reader.ReadMsg()
 		if err != nil {
 			reader.ReleaseMsg(received)
