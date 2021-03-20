@@ -36,6 +36,9 @@ type Node struct {
 	PublicKey  string
 	Agent      string
 
+	EnablePushService    bool
+	EnableConnService    bool
+	EnableReachService   bool
 	EnablePrivateNetwork bool
 	SwarmKey             []byte
 
@@ -63,6 +66,7 @@ type Listener interface {
 	Push(string, string)
 	BitSwapData(string, string, []byte)
 	BitSwapError(string, string, string)
+	Connected(pretty string)
 }
 
 type Closeable interface {

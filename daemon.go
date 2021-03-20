@@ -79,6 +79,33 @@ func (n *Node) Push(pid string, msg []byte) (int, error) {
 	return num, nil
 }
 
+func connected(n *Node, ctx context.Context) {
+	// TODO change to EvtPeerConnectednessChanged
+	subCompleted, err := n.Host.EventBus().Subscribe(new(event.EvtPeerIdentificationCompleted))
+	defer subCompleted.Close()
+	if err != nil {
+		n.Listener.Error("failed to subscribe to identify notifications")
+		return
+	}
+	for {
+		select {
+		case ev, ok := <-subCompleted.Out():
+			if !ok {
+				return
+			}
+
+			evt, ok := ev.(event.EvtPeerIdentificationCompleted)
+			if !ok {
+				return
+			}
+			n.Listener.Connected(evt.Peer.Pretty())
+
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
 func receiver(n *Node) {
 
 	listener, _ := gostream.Listen(n.Host, ProtocolPush)
@@ -246,9 +273,17 @@ func (n *Node) Daemon() error {
 	n.Running = true
 	n.Shutdown = false
 
-	go receiver(n)
-	go reachable(n, ctx)
+	if n.EnablePushService {
+		go receiver(n)
+	}
 
+	if n.EnableReachService {
+		go reachable(n, ctx)
+	}
+
+	if n.EnableConnService {
+		go connected(n, ctx)
+	}
 	for {
 		if n.Shutdown {
 			n.Running = false
