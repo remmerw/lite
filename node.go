@@ -133,6 +133,7 @@ func (n *Node) handleNewStream(s network.Stream) {
 		p := s.Conn().RemotePeer()
 		if n.Listener.BitSwapGate(p.String()) {
 			_ = s.Reset()
+			return
 		}
 		received, err := reader.ReadMsg()
 		if err != nil {
