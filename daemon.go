@@ -28,7 +28,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"io"
 	_ "net/http/pprof"
-	"sort"
 	"time"
 )
 
@@ -80,7 +79,67 @@ func (n *Node) Push(pid string, msg []byte) (int, error) {
 	return num, nil
 }
 
-func (n *Node) Daemon(EnablePrivateSharing bool) error {
+func receiver(n *Node) {
+
+	listener, _ := gostream.Listen(n.Host, ProtocolPush)
+	defer listener.Close()
+	var Timeout = time.Second * 3
+
+	for {
+		conn, err := listener.Accept()
+
+		if err != nil {
+			n.Listener.Error(err.Error())
+			return
+		}
+
+		pid := conn.RemoteAddr().String()
+		if !n.Shutdown {
+
+			if n.Listener.AllowConnect(pid) {
+
+				buf := make([]byte, 59)
+				err = conn.SetDeadline(time.Now().Add(Timeout))
+				if err != nil {
+					n.Listener.Error(err.Error())
+				}
+				num, err := conn.Read(buf)
+				if err != nil && err != io.EOF {
+					n.Listener.Error(err.Error())
+				} else {
+					if n.Pushing {
+						id, err := cid.Decode(string(buf[:num]))
+						if err == nil {
+							n.Listener.Push(id.String(), pid)
+							_, err = conn.Write([]byte("ok"))
+							if err != nil {
+								n.Listener.Error(err.Error())
+							}
+						} else {
+							_, err = conn.Write([]byte("ko"))
+							if err != nil {
+								n.Listener.Error(err.Error())
+							}
+						}
+					} else {
+						_, err = conn.Write([]byte("ko"))
+						if err != nil {
+							n.Listener.Error(err.Error())
+						}
+					}
+				}
+			}
+			err = conn.Close()
+			if err != nil {
+				n.Listener.Error(err.Error())
+			}
+		} else {
+			return
+		}
+	}
+}
+
+func (n *Node) Daemon() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -182,10 +241,6 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 		return fmt.Errorf("constructPeerHost: %s", err)
 	}
 
-	n.Listener.Info("New Node...")
-
-	printSwarmAddrs(n)
-
 	n.Listener.Info("Daemon is ready")
 
 	n.Running = true
@@ -204,64 +259,6 @@ func (n *Node) Daemon(EnablePrivateSharing bool) error {
 	}
 
 	return nil
-}
-
-func receiver(n *Node) {
-
-	listener, _ := gostream.Listen(n.Host, ProtocolPush)
-	defer listener.Close()
-	var Timeout = time.Second * 3
-
-	for {
-		conn, err := listener.Accept()
-
-		if err != nil {
-			n.Listener.Error(err.Error())
-			return
-		}
-
-		pid := conn.RemoteAddr().String()
-		if !n.Shutdown {
-
-			buf := make([]byte, 59)
-			err = conn.SetDeadline(time.Now().Add(Timeout))
-			if err != nil {
-				n.Listener.Error(err.Error())
-			}
-			num, err := conn.Read(buf)
-			if err != nil && err != io.EOF {
-				n.Listener.Error(err.Error())
-			} else {
-				if n.Pushing {
-					id, err := cid.Decode(string(buf[:num]))
-					if err == nil {
-						n.Listener.Push(id.String(), pid)
-						_, err = conn.Write([]byte("ok"))
-						if err != nil {
-							n.Listener.Error(err.Error())
-						}
-					} else {
-						_, err = conn.Write([]byte("ko"))
-						if err != nil {
-							n.Listener.Error(err.Error())
-						}
-					}
-				} else {
-					_, err = conn.Write([]byte("ko"))
-					if err != nil {
-						n.Listener.Error(err.Error())
-					}
-				}
-			}
-
-			err = conn.Close()
-			if err != nil {
-				n.Listener.Error(err.Error())
-			}
-		} else {
-			return
-		}
-	}
 }
 
 func reachable(n *Node, ctx context.Context) {
@@ -321,30 +318,4 @@ func constructPeerHost(ctx context.Context, id peer.ID, ps peerstore.Peerstore, 
 	options = append([]libp2p.Option{libp2p.Identity(pkey), libp2p.Peerstore(ps)}, options...)
 
 	return libp2p.New(ctx, options...)
-}
-
-func printSwarmAddrs(n *Node) {
-
-	var lisAddrs []string
-	ifaceAddrs, err := n.Host.Network().InterfaceListenAddresses()
-	if err != nil {
-		n.Listener.Error(fmt.Sprintf("failed to read listening addresses: %s", err))
-	}
-	for _, addr := range ifaceAddrs {
-		lisAddrs = append(lisAddrs, addr.String())
-	}
-	sort.Strings(lisAddrs)
-	for _, addr := range lisAddrs {
-		n.Listener.Info(fmt.Sprintf("Swarm listening on %s", addr))
-	}
-
-	var addrs []string
-	for _, addr := range n.Host.Addrs() {
-		addrs = append(addrs, addr.String())
-	}
-	sort.Strings(addrs)
-	for _, addr := range addrs {
-		n.Listener.Info(fmt.Sprintf("Swarm announcing %s", addr))
-	}
-
 }

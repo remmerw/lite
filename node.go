@@ -56,6 +56,7 @@ type Listener interface {
 	Error(Message string)
 	Info(Message string)
 	Verbose(Message string)
+	AllowConnect(string) bool
 	ReachableUnknown()
 	ReachablePublic()
 	ReachablePrivate()
