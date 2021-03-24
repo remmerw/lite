@@ -86,6 +86,36 @@ func (n *Node) CheckSwarmKey(key string) error {
 	return nil
 }
 
+var (
+	ProtocolPush protocol.ID = "/ipfs/push/1.0.0"
+)
+
+func (n *Node) Push(pid string, msg []byte) (int, error) {
+	var id peer.ID
+
+	var Timeout = time.Second * 3
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(Timeout))
+	defer cancel()
+
+	id, err := peer.Decode(pid)
+	if err != nil {
+		return 0, err
+	}
+
+	stream, err := n.Host.NewStream(ctx, id, ProtocolPush)
+	if err != nil {
+		return 0, err
+	}
+	defer stream.Close()
+	dnsTimeout := time.Duration(3) * time.Second
+	err = stream.SetWriteDeadline(time.Now().Add(dnsTimeout))
+	if err != nil && err != io.EOF {
+		return 0, err
+	}
+	return stream.Write(msg)
+}
+
 func (n *Node) WriteMessage(close Closeable, pid string, protocols string, data []byte, timeout int32) (int, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -125,6 +155,11 @@ func (n *Node) WriteMessage(close Closeable, pid string, protocols string, data 
 func (n *Node) SetStreamHandler(proto string) {
 	n.Host.SetStreamHandler(protocol.ID(proto), n.handleNewStream)
 }
+
+func (n *Node) SetPushHandler() {
+	n.Host.SetStreamHandler(ProtocolPush, n.handlePushStream)
+}
+
 func (n *Node) handleNewStream(s network.Stream) {
 	defer s.Close()
 
@@ -145,6 +180,27 @@ func (n *Node) handleNewStream(s network.Stream) {
 			return
 		}
 		n.Listener.BitSwapData(p.String(), string(s.Protocol()), received)
+		reader.ReleaseMsg(received)
+	}
+}
+
+func (n *Node) handlePushStream(s network.Stream) {
+	defer s.Close()
+
+	reader := msgio.NewVarintReaderSize(s, network.MessageSizeMax)
+	for {
+		p := s.Conn().RemotePeer()
+
+		received, err := reader.ReadMsg()
+		if err != nil {
+			reader.ReleaseMsg(received)
+			if err != io.EOF {
+				_ = s.Reset()
+				n.Listener.Error(err.Error())
+			}
+			return
+		}
+		n.Listener.Push(p.String(), string(received))
 		reader.ReleaseMsg(received)
 	}
 }

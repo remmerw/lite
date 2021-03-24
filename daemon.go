@@ -5,7 +5,6 @@ import (
 	"context"
 	_ "expvar"
 	"fmt"
-	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-ipns"
 	"github.com/libp2p/go-libp2p"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
@@ -16,9 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/libp2p/go-libp2p-core/pnet"
-	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/libp2p/go-libp2p-core/routing"
-	"github.com/libp2p/go-libp2p-gostream"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	noise "github.com/libp2p/go-libp2p-noise"
 	"github.com/libp2p/go-libp2p-peerstore/pstoremem"
@@ -26,58 +23,9 @@ import (
 	record "github.com/libp2p/go-libp2p-record"
 	tls "github.com/libp2p/go-libp2p-tls"
 	ma "github.com/multiformats/go-multiaddr"
-	"io"
 	_ "net/http/pprof"
 	"time"
 )
-
-var (
-	ProtocolPush protocol.ID = "/ipfs/push/1.0.0"
-)
-
-func (n *Node) Push(pid string, msg []byte) (int, error) {
-	var id peer.ID
-
-	var Timeout = time.Second * 3
-	var num int
-	var err error
-
-	id, err = peer.Decode(pid)
-	if err != nil {
-		return 0, err
-	}
-	clientConn, err := gostream.Dial(context.Background(),
-		n.Host, id, ProtocolPush)
-
-	if err != nil {
-		return 0, err
-	}
-
-	defer clientConn.Close()
-	err = clientConn.SetDeadline(time.Now().Add(Timeout))
-	if err != nil {
-		return 0, err
-	}
-
-	num, err = clientConn.Write(msg)
-	if err != nil && err != io.EOF {
-		return 0, err
-	}
-
-	buf := make([]byte, 2)
-	cum, err := clientConn.Read(buf)
-
-	if err != nil && err != io.EOF {
-		n.Listener.Error(err.Error())
-		return 0, err
-	}
-
-	if string(buf[:cum]) != "ok" {
-		return 0, err
-	}
-
-	return num, nil
-}
 
 func connected(n *Node, ctx context.Context) {
 	// TODO change to EvtPeerConnectednessChanged
@@ -101,66 +49,6 @@ func connected(n *Node, ctx context.Context) {
 			n.Listener.Connected(evt.Peer.Pretty())
 
 		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func receiver(n *Node) {
-
-	listener, _ := gostream.Listen(n.Host, ProtocolPush)
-	defer listener.Close()
-	var Timeout = time.Second * 3
-
-	for {
-		conn, err := listener.Accept()
-
-		if err != nil {
-			n.Listener.Error(err.Error())
-			return
-		}
-
-		pid := conn.RemoteAddr().String()
-		if !n.Shutdown {
-
-			if n.Listener.AllowConnect(pid) {
-
-				buf := make([]byte, 59)
-				err = conn.SetDeadline(time.Now().Add(Timeout))
-				if err != nil {
-					n.Listener.Error(err.Error())
-				}
-				num, err := conn.Read(buf)
-				if err != nil && err != io.EOF {
-					n.Listener.Error(err.Error())
-				} else {
-					if n.Pushing {
-						id, err := cid.Decode(string(buf[:num]))
-						if err == nil {
-							n.Listener.Push(id.String(), pid)
-							_, err = conn.Write([]byte("ok"))
-							if err != nil {
-								n.Listener.Error(err.Error())
-							}
-						} else {
-							_, err = conn.Write([]byte("ko"))
-							if err != nil {
-								n.Listener.Error(err.Error())
-							}
-						}
-					} else {
-						_, err = conn.Write([]byte("ko"))
-						if err != nil {
-							n.Listener.Error(err.Error())
-						}
-					}
-				}
-			}
-			err = conn.Close()
-			if err != nil {
-				n.Listener.Error(err.Error())
-			}
-		} else {
 			return
 		}
 	}
@@ -274,7 +162,7 @@ func (n *Node) Daemon() error {
 	n.Shutdown = false
 
 	if n.EnablePushService {
-		go receiver(n)
+		go n.SetPushHandler()
 	}
 
 	if n.EnableReachService {
