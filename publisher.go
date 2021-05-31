@@ -42,7 +42,8 @@ func (n *Node) PublishName(p string, close Closeable, sequence int) error {
 
 	eol := time.Now().Add(DefaultRecordEOL)
 
-	record, err := ipns.Create(pkey, []byte(value), uint64(sequence), eol)
+	record, err := ipns.Create(pkey, []byte(value), uint64(sequence), eol,
+		time.Hour*6)
 	if err != nil {
 		return err
 	}
